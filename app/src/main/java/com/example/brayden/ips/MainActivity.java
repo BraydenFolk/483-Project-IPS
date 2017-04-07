@@ -26,12 +26,16 @@ import android.support.v7.app.AppCompatActivity;
 import ca.hss.heatmaplib.HeatMap;
 
 
-public class MainActivity extends AppCompatActivity  {
-
+public class MainActivity extends AppCompatActivity implements BluetoothBeaconInterface
+{
     private final static int REQUEST_ENABLE_BT = 1;
     private BluetoothAdapter mBluetoothAdapter;
     private ArrayList<BluetoothBeacon> arrayOfFoundBTDevices = new ArrayList<BluetoothBeacon>();
     public TextView nameTextView;
+    public TextView locationTxtView;
+
+    float yRoomDistance = 0;
+    float xRoomDistance = 0;
 
     CountDownTimer timer;
 
@@ -69,6 +73,7 @@ public class MainActivity extends AppCompatActivity  {
         //registerReceiver(mReceiver, filter);
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         nameTextView = (TextView) findViewById(R.id.nameTxtView);
+        locationTxtView = (TextView) findViewById(R.id.locationTxtView);
 
         IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
         registerReceiver(mReceiver, filter);
@@ -86,6 +91,8 @@ public class MainActivity extends AppCompatActivity  {
         mBluetoothAdapter.startDiscovery();
 
         TimerActivity();
+
+        calibrateRoomSide(20, 40);
     }
 
     private float clamp(float value, float min, float max) {
@@ -154,16 +161,20 @@ public class MainActivity extends AppCompatActivity  {
                         }
                     }
                 }
-                int rssi = ConvertRSSIToReadable(intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE));
-                rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE);
+                int rssiFt = ConvertRSSIToReadable(intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE));
+                int rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE);
                 if (found) {
-                    arrayOfFoundBTDevices.get(index).setBluetoothRssi(rssi);
+                    arrayOfFoundBTDevices.get(index).setBluetoothRssi(rssiFt);
+                    arrayOfFoundBTDevices.get(index).setBluetoothRssiAct(rssi);
+                    arrayOfFoundBTDevices.get(index).setBluetoothDistance(rssi);
                 } else {
                     BluetoothBeacon bluetoothBeacon = new BluetoothBeacon();
                     bluetoothBeacon.setBluetoothName(device.getName());
                     bluetoothBeacon.setBluetoothAddress(device.getAddress());
+                    bluetoothBeacon.setBluetoothRssi(rssiFt);
                     bluetoothBeacon.setBluetoothRssi(rssi);
-                    if (device.getName().contains("Brayden's iPhone") || device.getName().contains("BRAYDENSSURFACE")) {
+                    bluetoothBeacon.setBluetoothDistance(rssi);
+                    if (device.getName().contains("Brayden's iPhone") || device.getName().contains("BRAYDENSSURFACE") || device.getName().contains("David Huo") || device.getName().contains("David Huo2")) {
                         arrayOfFoundBTDevices.add(bluetoothBeacon);
                     }
                     //nameTextView.setText(nameTextView.getText().toString() + " " + bluetoothBeacon.getBluetoothName() + "/" + bluetoothBeacon.getBluetoothRssi());
@@ -176,24 +187,46 @@ public class MainActivity extends AppCompatActivity  {
         }
     };
 
+    @Override
+    public void calibrateRoomSide(float fltXDistance, float fltYDistance)
+    {
+        xRoomDistance = fltXDistance;
+        yRoomDistance = fltYDistance;
+    }
+
+    @Override
+    public void plotPosition(float fltDistanceFromA, float fltDistanceFromB, float fltDistanceFromC, float fltDistanceFromD)
+    {
+        float x = (float)((Math.pow(30, 2) + Math.pow(fltDistanceFromC, 2) - Math.pow(fltDistanceFromD, 2)) / 60);
+        float y = (float)((Math.pow(30, 2) + Math.pow(fltDistanceFromC, 2) - Math.pow(fltDistanceFromA, 2)) / 60);
+
+        if (x < 0)
+        {
+            x = 0;
+        }
+
+        if (y < 0)
+        {
+            y = 0;
+        }
+
+        locationTxtView.setText("(" + x + ", " + y + ")");
+    }
+
     private int ConvertRSSIToReadable(int rssi)
     {
         int rssiConverted = 0;
         if (rssi < 0 && rssi > -35)
         {
-            rssiConverted = 5;
+            rssiConverted = 2;
         }
-        else if (rssi < -35 && rssi > -50)
+        else if (rssi < -35 && rssi > -40)
         {
-            rssiConverted = 10;
-        }
-        else if (rssi < -50)
-        {
-            rssiConverted = 15;
+            rssiConverted = 20;
         }
         else
         {
-            rssiConverted = 20;
+            rssiConverted = 40;
         }
 
         return rssiConverted;
@@ -206,11 +239,27 @@ public class MainActivity extends AppCompatActivity  {
 
         try
         {
+            float a = 20; float b = 20; float c = 20; float d = 20; // default if not in range
             for (int i = 0; i < arrayOfFoundBTDevices.size(); i++)
             {
                 // Strictly for debugging, most likely will be where we will update the UI Grid
-                nameTextView.setText(nameTextView.getText().toString() + " " + arrayOfFoundBTDevices.get(i).getBluetoothName() + "/" + arrayOfFoundBTDevices.get(i).getBluetoothRssi());
+                nameTextView.setText(nameTextView.getText().toString() + " " + arrayOfFoundBTDevices.get(i).getBluetoothName() + "/" + arrayOfFoundBTDevices.get(i).getBluetoothRssi() + "/" + arrayOfFoundBTDevices.get(i).getBluetoothRssiAct());
+                if (arrayOfFoundBTDevices.get(i).getBluetoothName().contains("BRAYDENSSURFACE"))
+                {
+                    c = arrayOfFoundBTDevices.get(i).getBluetoothRssi();
+                }
+                else if (arrayOfFoundBTDevices.get(i).getBluetoothName().contains("Brayden's iPhone"))
+                {
+                    d = arrayOfFoundBTDevices.get(i).getBluetoothRssi();
+                }
+                else if (arrayOfFoundBTDevices.get(i).getBluetoothName().contains("David Huo2"))
+                {
+                    a = arrayOfFoundBTDevices.get(i).getBluetoothRssi();
+                }
             }
+
+            plotPosition(a, b, c, d);
+
             mBluetoothAdapter.startDiscovery();
         }
         catch (Exception ex) { }
